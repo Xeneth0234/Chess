@@ -7,7 +7,7 @@ p.init()  # Located here instead of main in case other methods need this.
 max_fps = 30  # Might change later.
 width = height = 512  # Can do 400
 dimension = 8
-sq_size = height / dimension
+sq_size = height // dimension   # to make sure it is an int. //
 images = {}
 
 
@@ -24,13 +24,50 @@ def main():
     clock = p.time.Clock()
     screen.fill(p.Color("white"))
     gamestate = ChessEngine.GameState()
+    valid_moves = gamestate.get_valid_moves()
+    move_made = False # Flag variable for move.
+
     load_images()
     playing = True
+    selected_sq = ()    # tuple: (row, col)
+    player_clicks = []  # two tuples: using (row, col)
 
     while playing:
         for e in p.event.get():
             if e.type == p.QUIT:
                 playing = False
+            elif e.type == p.MOUSEBUTTONDOWN:
+                location = p.mouse.get_pos()  # (x, y) location for mouse
+                col = location[0] // sq_size
+                row = location[1] // sq_size
+                if selected_sq == (row, col):   # if user click same square, will undo.
+                    selected_sq = ()
+                    player_clicks = []
+                else:
+                    selected_sq = (row, col)
+                    player_clicks.append(selected_sq)
+                if len(player_clicks) == 2:     # after 2nd click
+                    move = ChessEngine.Move(player_clicks[0], player_clicks[1], gamestate.board)
+                    print(move.get_chess_notation())
+                    if move in valid_moves:
+                        gamestate.make_move(move)
+                        move_made = True
+
+                    # reset
+                    selected_sq = ()
+                    player_clicks = []
+
+            elif e.type == p.KEYDOWN:
+                if e.key == p.K_u:  # Undo when u is pressed
+                    gamestate.undo_move()
+                    move_made = True
+                if e.key == p.K_r:  # redo when r is pressed
+                    gamestate.redo_move()
+                    move_made = True
+        if move_made:
+            valid_moves = gamestate.get_valid_moves()
+            move_made = False
+
         create_game_state(screen, gamestate)
         clock.tick(max_fps)
         p.display.flip()
