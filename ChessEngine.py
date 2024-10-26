@@ -1,5 +1,5 @@
 # File responsible for current state of game and determining current valid moves.
-import pygame as p
+
 class GameState():
     def __init__(self):
         self.board = [
@@ -12,8 +12,8 @@ class GameState():
             ["wP", "wP", "wP", "wP", "wP", "wP", "wP", "wP"],
             ["wR", "wN", "wB", "wQ", "wK", "wB", "wN", "wR"]
         ]
-        self.move_list = {'P': self.get_pawn_moves, 'R': self.get_rook_moves, 'N': self.get_knight_moves
-                          , 'B': self.get_bishop_moves, 'Q': self.get_queen_moves, 'K': self.get_king_moves}
+        self.move_list = {'P': self.get_pawn_moves, 'R': self.get_rook_moves, 'N': self.get_knight_moves,
+                          'B': self.get_bishop_moves, 'Q': self.get_queen_moves, 'K': self.get_king_moves}
         # This is just to make code look more clean.
 
         # 8x8 2d list. Labeled "colorPiece"
@@ -37,7 +37,7 @@ class GameState():
             self.black_king_loc = (move.end_row, move.end_col)
 
     def undo_move(self, flag):
-        if len(self.move_log) != 0:     # if a move can not be undone
+        if len(self.move_log) != 0:  # if a move can not be undone
             move = self.move_log.pop()
             if flag:
                 self.move_redo_stack.append(move)
@@ -54,7 +54,7 @@ class GameState():
     def redo_move(self):
         if len(self.move_redo_stack) != 0:
             move = self.move_redo_stack.pop()
-            self.move_log.append(move)      # re-append to move log.
+            self.move_log.append(move)  # re-append to move log.
 
             self.board[move.end_row][move.end_col] = move.piece_moved
             self.board[move.start_row][move.start_col] = move.piece_captured
@@ -65,48 +65,109 @@ class GameState():
                 self.black_king_loc = (move.end_row, move.end_col)
 
     def get_valid_moves(self):  # for things like pins and checks
-        # Inefficient way to validating for now
-        # 1) get possible moves
+        # 1) get all possible moves
         moves = self.get_possible_moves()
         # 2) for each move, make the move
-        for i in range(len(moves)-1, -1, -1):   # Tip: when removing from a list, go backwards
+        for i in range(len(moves)-1, -1, -1):
             self.make_move(moves[i])
-            self.white_to_move = not self.white_to_move         # because make move swaps turns automatically
-            # 3) check opponent and if they attack king
+            self.white_to_move = not self.white_to_move
+            # Checking if King is checked after making move by acting as all possible moves
             if self.in_check():
                 moves.remove(moves[i])
-
             self.white_to_move = not self.white_to_move
-            self.undo_move(False)                          # This is here due to making fake moves to test moves
-        if len(moves) == 0:     # Either checkmate or stalemate
+            self.undo_move(False)                           # undo the test move
+        if len(moves) == 0:             # Either checkmate or stalemate if no possible moves
             if self.in_check():
                 self.checkmate = True
             else:
                 self.stalemate = True
-        else:                   # If an undo happens. Or maybe something else.
+        else:                           # If an undo or something else happens.
             self.checkmate = False
             self.stalemate = False
 
         return moves
 
-    # If in check
     def in_check(self):
         if self.white_to_move:
-            return self.squares_attacked(self.white_king_loc[0], self.white_king_loc[1])
+            return self.king_attacked(self.white_king_loc[0], self.white_king_loc[1])
         else:
-            return self.squares_attacked(self.black_king_loc[0], self.black_king_loc[1])
+            return self.king_attacked(self.black_king_loc[0], self.black_king_loc[1])
 
     # where opposite color can attack
-    def squares_attacked(self, r, c):
-        self.white_to_move = not self.white_to_move        # To get opponent's move which is used in get_possible
-        opp_move = self.get_possible_moves()
-        self.white_to_move = not self.white_to_move         # reset to proper turn
-        for move in opp_move:
-            if move.end_row == r and move.end_col == c:         # square under attack
-                return True
+
+    def king_attacked(self, r, c):
+        enemy = 'b' if self.white_to_move else 'w'
+        # Pawn check
+        if self.white_to_move:  # If White King
+            if c + 1 <= 7:  # If not on right edge of board, can be attacked from top right
+                dest = self.board[r - 1][c + 1]
+                if dest[0] == enemy and dest[1] == 'P':
+                    return True
+            if c - 1 >= 0:  # If not left edge of board, can be attacked from top left
+                dest = self.board[r - 1][c - 1]
+                if dest[0] == enemy and dest[1] == 'P':
+                    return True
+        else:
+            if c + 1 <= 7:  # If not on right edge of board, can be attacked from top right
+                dest = self.board[r + 1][c + 1]
+                if dest[0] == enemy and dest[1] == 'P':
+                    return True
+            if c - 1 >= 0:  # If not left edge of board, can be attacked from top left
+                dest = self.board[r + 1][c - 1]
+                if dest[0] == enemy and dest[1] == 'P':
+                    return True
+        # King Check
+        king_movement = ((-1, -1), (-1, 1), (1, 1), (1, -1), (-1, 0), (0, 1), (1, 0), (0, -1))
+        for m in king_movement:
+            end_row = r + (m[0])
+            end_col = c + (m[1])
+            if 0 <= end_row <= 7 and 0 <= end_col <= 7:
+                dest = self.board[end_row][end_col]
+                if dest[0] == enemy and dest[1] == 'K':
+                    return True
+                elif dest != "--":                          # An ally or some other piece
+                    break
+            else:
+                break
+
+        rook_movement = ((-1, 0), (0, -1), (1, 0), (0, 1))  # Rook and Queen
+        for m in rook_movement:
+            for i in range(1, 8):
+                end_row = r + (m[0] * i)
+                end_col = c + (m[1] * i)
+                if 0 <= end_row <= 7 and 0 <= end_col <= 7:
+                    dest = self.board[end_row][end_col]
+                    if dest[0] == enemy and (dest[1] == 'R' or dest[1] == 'Q'):
+                        return True
+                    elif dest != "--":                       # An ally or some other piece
+                        break
+                else:
+                    break
+        bishop_movement = ((-1, -1), (-1, 1), (1, 1), (1, -1))  # Bishop and Queen
+        for m in bishop_movement:
+            for i in range(1, 8):
+                end_row = r + (m[0] * i)
+                end_col = c + (m[1] * i)
+                if 0 <= end_row <= 7 and 0 <= end_col <= 7:
+                    dest = self.board[end_row][end_col]
+                    if dest[0] == enemy and (dest[1] == 'B' or dest[1] == 'Q'):
+                        return True
+                    elif dest != "--":                       # An ally or some other piece
+                        break
+                else:
+                    break
+
+        knight_movement = ((-2, -1), (-2, 1), (2, -1), (2, 1), (-1, 2), (-1, -2), (1, 2), (1, -2))
+        for m in knight_movement:
+            end_row = r + m[0]
+            end_col = c + m[1]
+            if 0 <= end_row <= 7 and 0 <= end_col <= 7:
+                dest = self.board[end_row][end_col]
+                if dest[0] == enemy and dest[1] == 'N':  # if enemy knight is in the spot
+                    return True
         return False
 
-    def get_possible_moves(self):   # for legal moves.
+    def get_possible_moves(self):  # for legal moves.
         # In the future, try making it so it only checks on pieces you click maybe
         moves = []
         for r in range(len(self.board)):
@@ -119,50 +180,50 @@ class GameState():
 
     def get_pawn_moves(self, r, c, moves):
         if self.white_to_move:
-            if self.board[r-1][c] == "--":
-                moves.append(Move((r, c), (r-1, c), self.board))
-                if r == 6 and self.board[r-2][c] == "--":
-                    moves.append(Move((r, c), (r-2, c), self.board))
-            if c + 1 <= 7:                # Right
+            if self.board[r - 1][c] == "--":
+                moves.append(Move((r, c), (r - 1, c), self.board))
+                if r == 6 and self.board[r - 2][c] == "--":
+                    moves.append(Move((r, c), (r - 2, c), self.board))
+            if c + 1 <= 7:  # Right
                 if self.board[r - 1][c + 1][0] == 'b':
-                    moves.append(Move((r, c), (r-1, c+1), self.board))
-            if c - 1 >= 0:                # Left
+                    moves.append(Move((r, c), (r - 1, c + 1), self.board))
+            if c - 1 >= 0:  # Left
                 if self.board[r - 1][c - 1][0] == 'b':
-                    moves.append(Move((r, c), (r-1, c-1), self.board))
+                    moves.append(Move((r, c), (r - 1, c - 1), self.board))
 
-        else:                               # Black
-            if self.board[r+1][c] == "--":
-                moves.append(Move((r, c), (r+1, c), self.board))
-                if r == 1 and self.board[r+2][c] == "--":
-                    moves.append(Move((r, c), (r+2, c), self.board))
-            if c + 1 <= 7:                # Right
+        else:  # Black
+            if self.board[r + 1][c] == "--":
+                moves.append(Move((r, c), (r + 1, c), self.board))
+                if r == 1 and self.board[r + 2][c] == "--":
+                    moves.append(Move((r, c), (r + 2, c), self.board))
+            if c + 1 <= 7:  # Right
                 if self.board[r + 1][c + 1][0] == 'w':
-                    moves.append(Move((r, c), (r+1, c+1), self.board))
-            if c - 1 >= 0:                # Left
+                    moves.append(Move((r, c), (r + 1, c + 1), self.board))
+            if c - 1 >= 0:  # Left
                 if self.board[r + 1][c - 1][0] == 'w':
-                    moves.append(Move((r, c), (r+1, c-1), self.board))
+                    moves.append(Move((r, c), (r + 1, c - 1), self.board))
 
     def get_rook_moves(self, r, c, moves):
-        movement = {(-1, 0), (0, -1), (1,0), (0, 1)}    # up, left, down, right
+        movement = ((-1, 0), (0, -1), (1, 0), (0, 1))  # up, left, down, right
         opposite_color = 'b' if self.white_to_move else 'w'
         for m in movement:
             for i in range(1, 8):
-                dest_row = r + (m[0] * i)       # row + direction increment.
-                dest_col = c + (m[1] * i)       # column + direction increment.
-                if 0 <= dest_row <= 7 and 0 <= dest_col <= 7:   # in bounds
+                dest_row = r + (m[0] * i)   # row + direction increment.
+                dest_col = c + (m[1] * i)   # column + direction increment.
+                if 0 <= dest_row <= 7 and 0 <= dest_col <= 7:  # in bounds
                     dest = self.board[dest_row][dest_col]
                     if dest == "--":
                         moves.append(Move((r, c), (dest_row, dest_col), self.board))
-                    elif dest[0] == opposite_color:            # If opposite color, can capture then stop
+                    elif dest[0] == opposite_color:  # If opposite color, can capture then stop
                         moves.append(Move((r, c), (dest_row, dest_col), self.board))
                         break
-                    else:                                   # if same color, stop
+                    else:  # if same color, stop
                         break
-                else:                           # counting out of bounds
+                else:  # counting out of bounds
                     break
 
     def get_knight_moves(self, r, c, moves):
-        movement = {(-2, -1), (-2, 1), (2, -1), (2, 1), (-1, 2), (-1, -2), (1, 2), (1, -2)}  # Knight 8 spots
+        movement = ((-2, -1), (-2, 1), (2, -1), (2, 1), (-1, 2), (-1, -2), (1, 2), (1, -2))  # Knight 8 spots
         color = 'w' if self.white_to_move else 'b'
         for m in movement:
             dest_row = r + m[0]  # row + direction increment.
@@ -173,7 +234,7 @@ class GameState():
                     moves.append(Move((r, c), (dest_row, dest_col), self.board))
 
     def get_bishop_moves(self, r, c, moves):
-        movement = {(-1, -1), (-1, 1), (1, 1), (1, -1)}  # SW, SE, NE, NW
+        movement = ((-1, -1), (-1, 1), (1, 1), (1, -1))  # SW, SE, NE, NW
         opposite_color = 'b' if self.white_to_move else 'w'
         for m in movement:
             for i in range(1, 8):
@@ -196,7 +257,7 @@ class GameState():
         self.get_bishop_moves(r, c, moves)
 
     def get_king_moves(self, r, c, moves):
-        movement = {(-1, -1), (-1, 1), (1, 1), (1, -1), (-1, 0), (0, 1), (1, 0), (0, -1)}  # SW, SE, NE, NW, S, E, N, W
+        movement = ((-1, -1), (-1, 1), (1, 1), (1, -1), (-1, 0), (0, 1), (1, 0), (0, -1))  # SW, SE, NE, NW, S, E, N, W
         color = 'w' if self.white_to_move else 'b'
         for m in movement:
             dest_row = r + m[0]  # row + direction increment.
@@ -224,7 +285,7 @@ class Move():
         self.piece_captured = board[self.end_row][self.end_col]
 
     def __eq__(self, other):
-        if isinstance(other, Move):     # Making sure they are both objects of the class. Going to compare chess notation
+        if isinstance(other, Move):  # Making sure they are both objects of the class. Going to compare chess notation
             return self.get_chess_notation() == other.get_chess_notation()
         return False
 
