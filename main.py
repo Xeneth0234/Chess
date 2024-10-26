@@ -31,7 +31,7 @@ def main():
     playing = True
     selected_sq = ()    # tuple: (row, col)
     player_clicks = []  # two tuples: using (row, col)
-
+    start = True
     while playing:
         for e in p.event.get():
             if e.type == p.QUIT:
@@ -40,10 +40,12 @@ def main():
                 location = p.mouse.get_pos()  # (x, y) location for mouse
                 col = location[0] // sq_size
                 row = location[1] // sq_size
+                current_color = 'w' if gamestate.white_to_move else 'b'
+
                 if selected_sq == (row, col):   # if user click same square, will undo.
                     selected_sq = ()
                     player_clicks = []
-                else:
+                else:                           # Selected square
                     selected_sq = (row, col)
                     player_clicks.append(selected_sq)
                 if len(player_clicks) == 2:     # after 2nd click
@@ -53,28 +55,62 @@ def main():
                         gamestate.make_move(move)
                         move_made = True
 
-                    # reset
-                    selected_sq = ()
-                    player_clicks = []
+                        # reset
+                        selected_sq = ()
+                        player_clicks = []
+                        gamestate.move_redo_stack = []
+                    else:
+                        player_clicks = [selected_sq]
+                        create_game_state(screen, gamestate)
+                        if gamestate.in_check():
+                            if gamestate.white_to_move:
+                                p.draw.rect(screen, p.Color("Orange"),
+                                            p.Rect(gamestate.white_king_loc[1] * sq_size,
+                                                   gamestate.white_king_loc[0] * sq_size,
+                                                   sq_size, sq_size))
+                            else:
+                                p.draw.rect(screen, p.Color("Orange"),
+                                            p.Rect(gamestate.black_king_loc[1] * sq_size,
+                                                   gamestate.black_king_loc[0] * sq_size,
+                                                   sq_size, sq_size))
+                if gamestate.board[row][col][0] == current_color and len(player_clicks) == 1:    # highlight selection
+                    p.draw.rect(screen, p.Color("Red"), p.Rect(col * sq_size, row * sq_size, sq_size, sq_size))
+                    print("color: ", current_color)
 
             elif e.type == p.KEYDOWN:
                 if e.key == p.K_u:  # Undo when u is pressed
-                    gamestate.undo_move()
                     move_made = True
+                    gamestate.undo_move(move_made)
                 if e.key == p.K_r:  # redo when r is pressed
-                    gamestate.redo_move()
                     move_made = True
+                    gamestate.redo_move()
         if move_made:
             valid_moves = gamestate.get_valid_moves()
             move_made = False
-
-        create_game_state(screen, gamestate)
+            create_game_state(screen, gamestate)
+            if gamestate.in_check():
+                if gamestate.white_to_move:
+                    p.draw.rect(screen, p.Color("Orange"),
+                                p.Rect(gamestate.white_king_loc[1] * sq_size, gamestate.white_king_loc[0] * sq_size,
+                                       sq_size, sq_size))
+                else:
+                    p.draw.rect(screen, p.Color("Orange"),
+                                p.Rect(gamestate.black_king_loc[1] * sq_size, gamestate.black_king_loc[0] * sq_size,
+                                       sq_size, sq_size))
+        elif start:
+            create_game_state(screen, gamestate)
+            start = False
+        else:
+            create_piece(screen, gamestate.board)
         clock.tick(max_fps)
         p.display.flip()
 
 
+
+
 def create_game_state(screen, gamestate):
     create_board(screen, gamestate.board)  # draw squares then drawing pieces. Board should come first
+    create_piece(screen, gamestate.board)
 
 
 def create_board(screen, board):
@@ -84,8 +120,13 @@ def create_board(screen, board):
             color = colors[((r + c) % 2)]  # (0 = white, 1 = not white)
             p.draw.rect(screen, color, p.Rect(c * sq_size, r * sq_size, sq_size, sq_size))
 
-            piece = board[r][c]  # I may separate these later
-            if piece != "--":  # Not empty
+
+def create_piece(screen, board):
+    for r in range(dimension):
+        for c in range(dimension):
+            piece = board[r][c]
+
+            if piece != "--":
                 screen.blit(images[piece], p.Rect(c * sq_size, r * sq_size, sq_size, sq_size))
 
 

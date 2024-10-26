@@ -1,5 +1,5 @@
 # File responsible for current state of game and determining current valid moves.
-
+import pygame as p
 class GameState():
     def __init__(self):
         self.board = [
@@ -20,39 +20,95 @@ class GameState():
         self.white_to_move = True
         self.move_log = []
         self.move_redo_stack = []
-        self.current_move = []
+        self.white_king_loc = (7, 4)
+        self.black_king_loc = (0, 4)
+        self.checkmate = False
+        self.stalemate = False
 
     def make_move(self, move):  # Assuming move is valid and NOT special moves like castling, promotion & en-passant
         self.board[move.start_row][move.start_col] = "--"
         self.board[move.end_row][move.end_col] = move.piece_moved
         self.move_log.append(move)  # log move so we can undo it later
         self.white_to_move = not self.white_to_move  # swap players. Not negates current boolean (flips)
-        self.move_redo_stack.clear()    # to keep track of what has been undone
+        # Tracking King location
+        if move.piece_moved == 'wK':
+            self.white_king_loc = (move.end_row, move.end_col)
+        elif move.piece_moved == 'bK':
+            self.black_king_loc = (move.end_row, move.end_col)
 
-    def undo_move(self):
+    def undo_move(self, flag):
         if len(self.move_log) != 0:     # if a move can not be undone
             move = self.move_log.pop()
-            self.move_redo_stack.append(move)
+            if flag:
+                self.move_redo_stack.append(move)
+            # Flag is done because undo is being called in background due to weird inefficiency in valid move
 
             self.board[move.start_row][move.start_col] = move.piece_moved
             self.board[move.end_row][move.end_col] = move.piece_captured
             self.white_to_move = not self.white_to_move
+            if move.piece_moved == 'wK':
+                self.white_king_loc = (move.start_row, move.start_col)
+            elif move.piece_moved == 'bK':
+                self.black_king_loc = (move.start_row, move.start_col)
 
     def redo_move(self):
-        if self.move_redo_stack:
+        if len(self.move_redo_stack) != 0:
             move = self.move_redo_stack.pop()
             self.move_log.append(move)      # re-append to move log.
 
             self.board[move.end_row][move.end_col] = move.piece_moved
             self.board[move.start_row][move.start_col] = move.piece_captured
             self.white_to_move = not self.white_to_move
+            if move.piece_moved == 'wK':
+                self.white_king_loc = (move.end_row, move.end_col)
+            elif move.piece_moved == 'bK':
+                self.black_king_loc = (move.end_row, move.end_col)
 
     def get_valid_moves(self):  # for things like pins and checks
-        return self.get_possible_moves()    # Temporarily not caring for checks
+        # Inefficient way to validating for now
+        # 1) get possible moves
+        moves = self.get_possible_moves()
+        # 2) for each move, make the move
+        for i in range(len(moves)-1, -1, -1):   # Tip: when removing from a list, go backwards
+            self.make_move(moves[i])
+            self.white_to_move = not self.white_to_move         # because make move swaps turns automatically
+            # 3) check opponent and if they attack king
+            if self.in_check():
+                moves.remove(moves[i])
+
+            self.white_to_move = not self.white_to_move
+            self.undo_move(False)                          # This is here due to making fake moves to test moves
+        if len(moves) == 0:     # Either checkmate or stalemate
+            if self.in_check():
+                self.checkmate = True
+            else:
+                self.stalemate = True
+        else:                   # If an undo happens. Or maybe something else.
+            self.checkmate = False
+            self.stalemate = False
+
+        return moves
+
+    # If in check
+    def in_check(self):
+        if self.white_to_move:
+            return self.squares_attacked(self.white_king_loc[0], self.white_king_loc[1])
+        else:
+            return self.squares_attacked(self.black_king_loc[0], self.black_king_loc[1])
+
+    # where opposite color can attack
+    def squares_attacked(self, r, c):
+        self.white_to_move = not self.white_to_move        # To get opponent's move which is used in get_possible
+        opp_move = self.get_possible_moves()
+        self.white_to_move = not self.white_to_move         # reset to proper turn
+        for move in opp_move:
+            if move.end_row == r and move.end_col == c:         # square under attack
+                return True
+        return False
 
     def get_possible_moves(self):   # for legal moves.
         # In the future, try making it so it only checks on pieces you click maybe
-        moves = [Move((6, 4), (4, 4), self.board)]
+        moves = []
         for r in range(len(self.board)):
             for c in range(len(self.board[r])):
                 color = self.board[r][c][0]
