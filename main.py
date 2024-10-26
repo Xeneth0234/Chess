@@ -32,6 +32,7 @@ def main():
     selected_sq = ()    # tuple: (row, col)
     player_clicks = []  # two tuples: using (row, col)
     start = True
+
     while playing:
         for e in p.event.get():
             if e.type == p.QUIT:
@@ -51,15 +52,17 @@ def main():
                 if len(player_clicks) == 2:     # after 2nd click
                     move = ChessEngine.Move(player_clicks[0], player_clicks[1], gamestate.board)
                     print(move.get_chess_notation())
-                    if move in valid_moves:
-                        gamestate.make_move(move)
-                        move_made = True
+                    for i in range(len(valid_moves)):
+                        # Pawn promotion is here instead of engine because I am inefficient and 'fake check' moves.
+                        if move == valid_moves[i]:
+                            gamestate.make_move(valid_moves[i])
+                            move_made = True
 
-                        # reset
-                        selected_sq = ()
-                        player_clicks = []
-                        gamestate.move_redo_stack = []
-                    else:
+                            # reset
+                            selected_sq = ()
+                            player_clicks = []
+                            gamestate.move_redo_stack = []
+                    if not move_made:
                         player_clicks = [selected_sq]
                         create_game_state(screen, gamestate)
                         if gamestate.in_check():
@@ -75,8 +78,6 @@ def main():
                                                    sq_size, sq_size))
                 if gamestate.board[row][col][0] == current_color and len(player_clicks) == 1:    # highlight selection
                     p.draw.rect(screen, p.Color("Red"), p.Rect(col * sq_size, row * sq_size, sq_size, sq_size))
-                    print("color: ", current_color)
-
             elif e.type == p.KEYDOWN:
                 if e.key == p.K_u:  # Undo when u is pressed
                     move_made = True
