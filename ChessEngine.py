@@ -26,6 +26,8 @@ class GameState():
         self.stalemate = False
         self.stalemate_by_repeat = False
         self.enpassant_possible = ()        # temporary holder for when en passant is possible.
+        self.enpassant_possible_log = [self.enpassant_possible]
+        self.redo_enpassant_possible = ()
         self.castle_rights = Castle(True, True, True, True)
         self.castle_rights_log = [Castle(self.castle_rights.wks, self.castle_rights.bks,
                                          self.castle_rights.wqs, self.castle_rights.bqs)]
@@ -65,6 +67,8 @@ class GameState():
                 self.board[move.end_row][move.end_col + 1] = self.board[move.end_row][move.end_col - 2]
                 self.board[move.end_row][move.end_col - 2] = '--'       # remove old rook
 
+        self.enpassant_possible_log.append(self.enpassant_possible)
+
         self.update_castle_rights(move)
         self.castle_rights_log.append(Castle(self.castle_rights.wks, self.castle_rights.bks,
                                              self.castle_rights.wqs, self.castle_rights.bqs))
@@ -74,6 +78,9 @@ class GameState():
             move = self.move_log.pop()
             if flag:
                 self.move_redo_stack.append(move)
+                # Save old rights for Redo only if actual redo has been done
+                self.redo_enpassant_possible = self.enpassant_possible
+                self.redo_castle_rights = self.castle_rights
 
             self.board[move.start_row][move.start_col] = move.piece_moved
             self.board[move.end_row][move.end_col] = move.piece_captured
@@ -86,12 +93,11 @@ class GameState():
             if move.is_enpassant:           # undo en passant
                 self.board[move.end_row][move.end_col] = '--'       # Leave captured square blank
                 self.board[move.start_row][move.end_col] = move.piece_captured
-                self.enpassant_possible = (move.end_row, move.end_col)
-            if move.piece_moved[1] == 'P' and abs(move.start_row - move.end_row) == 2:
-                self.enpassant_possible = ()
 
-            # undo castle rights. Remove the new one and set to last one in list. Save old one for Redo
-            self.redo_castle_rights = self.castle_rights
+            self.enpassant_possible_log.pop()
+            self.enpassant_possible = self.enpassant_possible_log[-1]
+
+            # undo castle rights. Remove the new one and set to last one in list. r
             # Bug: Too many undoes can make log become empty and cause new_rights to attempt to copy from empty
             self.castle_rights_log.pop()
             new_rights = self.castle_rights_log[-1]
@@ -134,7 +140,8 @@ class GameState():
             elif move.piece_moved[1] == 'P' and abs(move.start_row - move.end_row) == 2 and move.start_row == 1:
                 self.enpassant_possible = (move.start_row + 1, move.end_col)
 
-            # Redo Castle rights. Used previous remembered rights
+            # Redo rights. Used previous remembered rights
+            self.redo_enpassant_possible = self.enpassant_possible
             self.castle_rights = self.redo_castle_rights
 
             if move.is_castle_move:
@@ -462,6 +469,7 @@ class Move():
         self.end_col = end[1]
         self.piece_moved = board[self.start_row][self.start_col]
         self.piece_captured = board[self.end_row][self.end_col]
+        self.is_capture = self.piece_captured != '--'     # This is for tracking for notation.
 
         self.is_pawn_promotion = ((self.piece_moved == 'wP' and self.end_row == 0)
                                   or (self.piece_moved == 'bP' and self.end_row == 7))
@@ -478,13 +486,36 @@ class Move():
             self.is_pawn_promotion = True
         """
 
+    # Overriding equal methods to allow an object to compare to another object since I am using class objects
+    # instead of directly using numbers for the moves
     def __eq__(self, other):
         if isinstance(other, Move):  # Making sure they are both objects of the class. Going to compare chess notation
             return self.get_chess_notation() == other.get_chess_notation()
         return False
 
-    # Overriding equal methods to allow an object to compare to another object since I am using class objects
-    # instead of directly using numbers for the moves
+    # Overriding str() function
+    def __str__(self):
+        # castle move
+        if self.is_castle_move:
+            return "O-O" if self.end_col == 6 else "O-O-O"
+
+        end_square = self.get_rank_file(self.end_row, self.end_col)
+        # pawn moves
+        if self.piece_moved[1] == 'P':
+            if self.is_capture or self.is_enpassant:
+                end_square = self.cols_to_files[self.start_col] + 'x' + end_square
+            if self.end_row == 0 and self.piece_moved[0] == 'w':
+                return end_square + "=Q"                            # For now only Q for Queen.
+            elif self.end_row == 7 and self.piece_moved[0] == 'b':
+                return end_square + "=Q"
+            else:
+                return end_square
+
+        # piece moves
+        move_string = self.piece_moved[1]
+        if self.is_capture:
+            move_string += 'x'
+        return move_string + end_square
 
     def get_chess_notation(self):
         return self.get_rank_file(self.start_row, self.start_col) + self.get_rank_file(self.end_row, self.end_col)

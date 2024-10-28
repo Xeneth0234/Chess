@@ -40,8 +40,11 @@ test = [
         [0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 0, 0, 0, 1, 0]
+        [0, 0, 0, 0, 0, 0, 0, 0]
     ]
+
+
+table_dictionaries = {"P": pawn_table, "N": knight_table}
 
 
 def find_random_move(valid_moves):
@@ -49,7 +52,7 @@ def find_random_move(valid_moves):
 
 
 # Non-recursive
-def find_best_move(gamestate, valid_moves):
+def find_best_move(gamestate, valid_moves, return_queue):
     turn_value = 1 if gamestate.white_to_move else -1
     minimax_score = checkmate
     best_move = None
@@ -75,16 +78,17 @@ def find_best_move(gamestate, valid_moves):
                     # Black's view. Wants to minimize.
                     # White's view. Wants to maximize.
                     score = -turn_value * score_board(gamestate)
-                    opponent_max_score = max(opponent_max_score, score)
+                opponent_max_score = max(opponent_max_score, score)
                 gamestate.undo_move(False)
         if minimax_score > opponent_max_score:
             minimax_score = opponent_max_score
             best_move = player_move
         elif minimax_score == opponent_max_score:   # Randomly change move if they have same value
-            if random.randint(0,9) < 3:
+            if random.randint(0, 9) < 3:
                 best_move = player_move
         gamestate.undo_move(False)
-    return best_move
+
+    return_queue.put(best_move)
 
 
 def find_best_move_minimax(gamestate, valid_moves):
@@ -96,6 +100,17 @@ def find_best_move_minimax(gamestate, valid_moves):
     negamax_move(gamestate, valid_moves, DEPTH, 1 if gamestate.white_to_move else -1)
     print(recursion_count)
     return next_move
+
+
+def find_best_move_minimax(gamestate, valid_moves, return_queue):
+    global next_move, recursion_count
+    next_move = None
+    # recursion_count = 0             # for debugging
+    random.shuffle(valid_moves)
+    # minimax_move(gamestate, valid_moves, DEPTH, gamestate.white_to_move)
+    negamax_move(gamestate, valid_moves, DEPTH, 1 if gamestate.white_to_move else -1)
+    # print(recursion_count)
+    return_queue.put(next_move)
 
 
 def minimax_move(gamestate, valid_moves, depth, white_to_move, alpha=-1000, beta=1000):
@@ -208,16 +223,13 @@ def score_board(gamestate):
         for square in range(len(gamestate.board)):
             if gamestate.board[row][square][0] == 'w':  # White is advantage at positive
                 score += piece_score[gamestate.board[row][square][1]]
-                if gamestate.board[row][square][1] == 'P':
-                    score += pawn_table[row][square]
-                if gamestate.board[row][square][1] == 'N':
-                    score += knight_table[row][square]
+                if gamestate.board[row][square][1] in table_dictionaries:
+                    score += table_dictionaries[gamestate.board[row][square][1]][row][square]
             elif gamestate.board[row][square][0] == 'b':  # Black is advantage at negative
                 score -= piece_score[gamestate.board[row][square][1]]
-                if gamestate.board[row][square][1] == 'P':
-                    score -= pawn_table[::-1][row][square]
-                if gamestate.board[row][square][1] == 'N':
-                    score -= knight_table[::-1][row][square]
+                if gamestate.board[row][square][1] in table_dictionaries:
+                    score -= table_dictionaries[gamestate.board[row][square][1]][::-1][row][square]
+
     return score
 
 
