@@ -2,6 +2,8 @@
 
 import pygame as p
 import ChessEngine
+import ChessAI
+import time
 
 global colors
 p.init()  # Located here instead of main in case other methods need this.
@@ -15,6 +17,7 @@ Future to do list
 - Change game state creation so it only updates moves that has changed 
     so it does not need to update entire board each time
 - Fix undo causing out of range error. I believe this has to do with the process of how log is saved not the fake moves
+- Try making the play state asynch. Aka thread and make the ui unresponsive if AI is taking turn
 """
 
 
@@ -40,13 +43,16 @@ def main():
     selected_sq = ()    # tuple: (row, col)
     player_clicks = []  # two tuples: using (row, col)
     game_over = False
+    player_one = False   # If a human is playing, then this will be true, if AI, False.
+    player_two = False  # Same as above but for black
 
     while playing:
+        human_turn = (gamestate.white_to_move and player_one) or (not gamestate.white_to_move and player_two)
         for e in p.event.get():
             if e.type == p.QUIT:
                 playing = False
             elif e.type == p.MOUSEBUTTONDOWN:
-                if not game_over:               # If game over, do not allow more moves / selections
+                if not game_over and human_turn:               # If game over, do not allow more moves / selections
                     location = p.mouse.get_pos()  # (x, y) location for mouse
                     col = location[0] // sq_size
                     row = location[1] // sq_size
@@ -79,8 +85,9 @@ def main():
                     move_made = True
                     gamestate.undo_move(move_made)
                     animate = False
-                    if game_over:
-                        game_over = False
+                    game_over = False
+                    if gamestate.stalemate:
+                        gamestate.stalemate = False
                 if e.key == p.K_r:  # redo when r is pressed
                     move_made = True
                     gamestate.redo_move()
@@ -90,8 +97,25 @@ def main():
                     valid_moves = gamestate.get_valid_moves()
                     selected_sq = ()
                     player_clicks = []
+                    game_over = False
                     move_made = False
                     animate = False
+
+        # AI move finder
+        if not game_over and not human_turn:
+            print("Current Board Score:", ChessAI.score_board(gamestate))
+            print("Material: ", ChessAI.score_material(gamestate.board))
+            AI_move = ChessAI.find_best_move_minimax(gamestate, valid_moves) if gamestate.white_to_move else (
+                ChessAI.find_best_move(gamestate, valid_moves))
+            if AI_move is not None:
+                print("The Move:", AI_move.get_chess_notation())
+            time.sleep(0.22)
+            if AI_move is None:
+                AI_move = ChessAI.find_random_move(valid_moves)
+            gamestate.make_move(AI_move)
+            move_made = True
+            animate = True
+
         if move_made:
             if animate:
                 animations(gamestate.move_log[-1], screen, gamestate.board, clock)
@@ -109,7 +133,10 @@ def main():
                 create_text(screen, "White wins by checkmate", "White")
         elif gamestate.stalemate:
             game_over = True
-            create_text(screen, "Stalemate", "None")
+            if gamestate.stalemate_by_repeat:
+                create_text(screen, "Stalemate by repeat", "Aqua")
+            else:
+                create_text(screen, "Stalemate", "Aqua")
         clock.tick(max_fps)
         p.display.flip()
 
@@ -179,7 +206,7 @@ def animations(move, screen, board, clock):
 
     delta_row = move.end_row - move.start_row
     delta_column = move.end_col - move.start_col
-    frames_per_square = 2          # Frames for one square
+    frames_per_square = 5          # Frames for one square
     frame_count = (abs(delta_row) + abs(delta_column)) * frames_per_square
     for frame in range(frame_count + 1):
         r, c = (move.start_row + delta_row * frame/frame_count, move.start_col + delta_column * frame/frame_count)

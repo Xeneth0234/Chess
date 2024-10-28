@@ -24,6 +24,7 @@ class GameState():
         self.black_king_loc = (0, 4)
         self.checkmate = False
         self.stalemate = False
+        self.stalemate_by_repeat = False
         self.enpassant_possible = ()        # temporary holder for when en passant is possible.
         self.castle_rights = Castle(True, True, True, True)
         self.castle_rights_log = [Castle(self.castle_rights.wks, self.castle_rights.bks,
@@ -105,6 +106,9 @@ class GameState():
                     self.board[move.end_row][move.end_col - 2] = self.board[move.end_row][move.end_col + 1]
                     self.board[move.end_row][move.end_col + 1] = '--'  # remove old rook
 
+            self.checkmate = False
+            self.stalemate = False
+
     def redo_move(self):
         if len(self.move_redo_stack) != 0:
             move = self.move_redo_stack.pop()
@@ -168,6 +172,26 @@ class GameState():
         else:                           # If an undo or something else happens.
             self.checkmate = False
             self.stalemate = False
+            self.stalemate_by_repeat = False
+        # stalemate if last 3 are the same from both sides.
+        # This is so inefficient, but I can't loop because my brain is off.
+        # Because have to make sure only certain moves are same and no differences in between
+        if len(self.move_log) >= 8:
+            last_move = self.move_log[-1]
+            second_move = self.move_log[-2]
+            third_move = self.move_log[-3]
+            fourth_move = self.move_log[-4]
+            fifth_move = self.move_log[-5]
+            sixth_move = self.move_log[-6]
+            seventh_move = self.move_log[-7]
+            eighth_move = self.move_log[-8]
+            if ((eighth_move == fourth_move) and (seventh_move == third_move) and (sixth_move == second_move)
+                    and (fifth_move == last_move)):
+                self.stalemate = True
+                self.stalemate_by_repeat = True
+            else:
+                self.stalemate = False
+                self.stalemate_by_repeat = False
 
         self.enpassant_possible = temp_enpassant_possible
         self.castle_rights = temp_castle_rights
@@ -303,7 +327,7 @@ class GameState():
                 moves.append(Move((r, c), (r - 1, c), self.board))
                 if r == 6 and self.board[r - 2][c] == "--":
                     moves.append(Move((r, c), (r - 2, c), self.board))
-            if c + 1 <= 7:  # Right
+            if c + 1 <= 7:  # If not at Right
                 if self.board[r - 1][c + 1][0] == 'b':
                     moves.append(Move((r, c), (r - 1, c + 1), self.board))
                 elif (r - 1, c + 1) == self.enpassant_possible:                # checking if move is same as enpassant square
@@ -412,6 +436,7 @@ class GameState():
         if self.board[r][c - 1] == '--' and self.board[r][c - 2] == '--' and self.board[r][c - 3] == '--':
             if not self.king_attacked(r, c - 1) and not self.king_attacked(r, c - 2):
                 moves.append(Move((r, c), (r, c - 2), self.board, is_castle_move=True))
+
 
 class Castle:
     def __init__(self, wks, bks, wqs, bqs):
