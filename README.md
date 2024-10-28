@@ -8,5 +8,5 @@ Utilizes Pygames to create a game of chess
 Controls:
 U - Undo <br />
 R - Redo <br />
-- - Reset <br />
+"-" - Reset (Minus key) <br />
 Left mouse - Select 
